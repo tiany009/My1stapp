@@ -5,11 +5,19 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
       - uses: actions/setup-java@v4
         with:
@@ -19,16 +27,27 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev build-essential
-          python -m pip install --upgrade pip
-          python -m pip install "cython<3" buildozer
+          sudo apt-get install -y git zip unzip autoconf automake libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev build-essential patch
+          python -m pip install "pip==24.0" "setuptools==69.5.1" "wheel==0.43.0"
+          python -m pip install "cython==0.29.36" "buildozer==1.5.0" "virtualenv==20.26.6"
 
       - name: Build APK
         run: |
-          yes | buildozer -v android debug
+          buildozer -v android debug 2>&1 | tee build.log
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: myfirstapp-apk
           path: bin/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-log
+          path: build.log
+          if-no-files-found: warn
+
