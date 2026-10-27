@@ -8,7 +8,8 @@ from array import array
 class DebugClient:
     def __init__(self, host):
         self.sock = socket.create_connection((host, 744), timeout=10)
-        self.sock.settimeout(20)
+        self.sock.settimeout(30)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
     def close(self):
         self.sock.close()
     def recv(self, size):
@@ -131,12 +132,11 @@ def run_app():
                 try:
                     action()
                 except Exception as exc:
-                    self.show(str(exc)+'\nIf the connection timed out, reconnect and start a new scan.')
+                    self.show(str(exc)+'\nLast completed scan retained. Keep the game running; retry the filter. If the game restarted, reconnect and start a new scan.')
                     if self.client:
                         try: self.client.close()
                         except Exception: pass
                     self.client=None
-                    self.reset()
                 finally:
                     Clock.schedule_once(self.unlock)
             threading.Thread(target=task,daemon=True).start()
@@ -180,6 +180,34 @@ def run_app():
             Clock.schedule_once(update)
             self.show(f'{len(sections)} sections found. Select a section; start a new scan for each section or data type. A zero result means try another section/type.')
         def capture(self):
+            # Retry a complete capture, never combine partial reads across sockets.
+            section=self.sections.get(self.inputs[2])
+            if section is None: raise ValueError('Load and select a memory section first')
+            if self.snapshot is not None and self.scan_host != self.inputs[0]:
+                raise ValueError('Host changed; reconnect and start a new scan')
+            for attempt in range(2):
+                try:
+                    if self.client is None:
+                        self.client=DebugClient(self.inputs[0])
+                        self.client.branding()
+                        pid,base,length=section
+                        entries=self.client.processes()
+                        expected=self.inputs[1].split(': ',1)[-1]
+                        if (pid,expected) not in entries:
+                            raise ValueError('Game process changed; reconnect and start a new scan')
+                        maps=self.client.maps(pid)
+                        if not any(start<=base and end>=base+length and prot&3==3
+                                   for raw,start,end,offset,prot in maps):
+                            raise ValueError('Memory mapping changed; reconnect and start a new scan')
+                    return self.capture_once()
+                except (OSError, ConnectionError):
+                    if self.client:
+                        try: self.client.close()
+                        except Exception: pass
+                    self.client=None
+                    if attempt: raise
+                    self.show('Connection interrupted. Reconnecting and retrying; previous scan retained.')
+        def capture_once(self):
             if not self.client: raise ValueError('Connect first')
             section=self.sections.get(self.inputs[2])
             if section is None: raise ValueError('Load and select a memory section first')
@@ -192,6 +220,7 @@ def run_app():
             return bytes(data),section
         def start_scan(self):
             self.snapshot,section=self.capture()
+            self.scan_host=self.inputs[0]
             self.scan_key=(section,self.inputs[3])
             self.candidates=None
             count=len(self.snapshot)//struct.calcsize('<'+TYPES[self.inputs[3]])
