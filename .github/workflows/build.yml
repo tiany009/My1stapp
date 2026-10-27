@@ -31,6 +31,9 @@ jobs:
           python -m pip install "pip==24.0" "setuptools==69.5.1" "wheel==0.43.0"
           python -m pip install "cython==0.29.36" "buildozer==1.5.0" "virtualenv==20.26.6"
 
+      - name: Test scanner core
+        run: python -m unittest discover -s tests -p test_smart_scanner.py -v
+
       - name: Build APK
         run: |
           buildozer -v android debug 2>&1 | tee build.log

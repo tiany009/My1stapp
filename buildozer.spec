@@ -5,7 +5,7 @@ package.domain = org.pocketapk
 source.dir = .
 source.include_exts = py,kv,png,jpg,atlas,json
 source.exclude_dirs = .git,.github,bin,tests
-version = 0.2
+version = 0.3
 requirements = python3==3.11.5,hostpython3==3.11.5,kivy==2.3.0,charset-normalizer==2.1.1
 orientation = portrait
 fullscreen = 0
